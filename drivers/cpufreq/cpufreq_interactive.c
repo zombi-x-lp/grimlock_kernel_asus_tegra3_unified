@@ -97,7 +97,7 @@ static unsigned long sustain_load;
 /*
  * The minimum amount of time to spend at a frequency before we can ramp down.
  */
-#define DEFAULT_MIN_SAMPLE_TIME 30000;
+#define DEFAULT_MIN_SAMPLE_TIME 40000;
 static unsigned long min_sample_time;
 
 /*
@@ -125,7 +125,7 @@ static unsigned long max_normal_freq;
 
 
 /* Defines to control mid-range frequencies */
-#define DEFAULT_MID_RANGE_GO_MAXSPEED_LOAD 95
+#define DEFAULT_MID_RANGE_GO_MAXSPEED_LOAD 65
 
 static unsigned long midrange_freq;
 static unsigned long midrange_go_maxspeed_load;
