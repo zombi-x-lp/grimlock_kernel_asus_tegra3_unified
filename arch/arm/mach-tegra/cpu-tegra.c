@@ -829,8 +829,6 @@ int tegra_cpu_late_resume_set_speed_cap(int speed)
                return -EBUSY;
        }
 
-
-       new_speed = ASUS_governor_speed(new_speed);
        new_speed = tegra_throttle_governor_speed(new_speed);
        new_speed = edp_governor_speed(new_speed);
 
