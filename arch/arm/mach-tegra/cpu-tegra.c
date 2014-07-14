@@ -54,10 +54,8 @@
 #define SYSTEM_PWRSAVE_MODE	(2)
 #define SYSTEM_MODE_END 		(SYSTEM_PWRSAVE_MODE + 1)
 #define SYSTEM_PWRSAVE_MODE_MAX_FREQ	(1000000)
-
 unsigned int power_mode_table[SYSTEM_MODE_END] = {1000000,1200000,1400000};
 */
-
 
 #define CAMERA_ENABLE_EMC_MINMIAM_RATE (667000000)
 /* tegra throttling and edp governors require frequencies in the table
@@ -306,12 +304,12 @@ static struct kernel_param_ops cap_ops = {
 };
 module_param_cb(cpu_user_cap, &cap_ops, &cpu_user_cap, 0644);
 
-/*static unsigned int user_cap_speed(unsigned int requested_speed)
+static unsigned int user_cap_speed(unsigned int requested_speed)
 {
 	if ((cpu_user_cap) && (requested_speed > cpu_user_cap))
 		return cpu_user_cap;
 	return requested_speed;
-}*/
+}
 
 #ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 
@@ -391,6 +389,11 @@ int tegra_edp_update_thermal_zone(int temperature)
 	int ret = 0;
 	int nlimits = cpu_edp_limits_size;
 	int index;
+	if(temperature >= 75){
+		edp_enable=1;
+	} else {
+		edp_enable=0;
+	}
 
 	if (!cpu_edp_limits)
 		return -EINVAL;
@@ -496,26 +499,23 @@ static int tegra_cpu_edp_notify(
 		edp_update_limit();
 
 		cpu_speed = tegra_getspeed(0);
-		new_speed = edp_governor_speed(cpu_speed);
+	if(edp_enable) {
+		new_speed = edp_governor_speed(new_speed);
+	} else {
+		new_speed = cpu_speed;
+	}
 		if (new_speed < cpu_speed) {
 			ret = tegra_cpu_set_speed_cap(NULL);
-			printk(KERN_DEBUG "cpu-tegra:%sforce EDP limit %u kHz"
-				"\n", ret ? " failed to " : " ", new_speed);
-		}
-		if (!ret)
-			ret = tegra_cpu_dvfs_alter(
-				edp_thermal_index, &edp_cpumask, false, event);
 		if (ret) {
 			cpu_clear(cpu, edp_cpumask);
 			edp_update_limit();
+		}
 		}
 		mutex_unlock(&tegra_cpu_lock);
 		break;
 	case CPU_DEAD:
 		mutex_lock(&tegra_cpu_lock);
 		cpu_clear(cpu, edp_cpumask);
-		tegra_cpu_dvfs_alter(
-			edp_thermal_index, &edp_cpumask, true, event);
 		edp_update_limit();
 		tegra_cpu_set_speed_cap(NULL);
 		mutex_unlock(&tegra_cpu_lock);
@@ -793,7 +793,7 @@ int tegra_cpu_set_speed_cap(unsigned int *speed_cap)
 
 	new_speed = tegra_throttle_governor_speed(new_speed);
 	new_speed = edp_governor_speed(new_speed);
-	//new_speed = user_cap_speed(new_speed);
+	new_speed = user_cap_speed(new_speed);
 	if (speed_cap)
 		*speed_cap = new_speed;
 
