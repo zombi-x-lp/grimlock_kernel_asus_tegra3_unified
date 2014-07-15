@@ -353,6 +353,11 @@ static unsigned int edp_predict_limit(unsigned int cpus)
 	if (system_edp_limits && system_edp_alarm)
 		limit = min(limit, system_edp_limits[cpus - 1]);
 	limit = min(limit, pwr_cap_limits[cpus - 1]);//pwr save
+	 if( cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
+	 {
+ 	/* override EDP limits */
+ 	limit = 1700000;
+ 	}
 
 	return limit;
 }
