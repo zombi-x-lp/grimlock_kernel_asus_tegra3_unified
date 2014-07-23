@@ -408,6 +408,10 @@ static int tegra_fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
 }
 
 int tegra_fb_get_mode(struct tegra_dc *dc) {
+	if (dc->fb->info->mode == NULL) {
+		dev_err(&dc->fb->ndev->dev, "dc->fb->info->mode is NULL\n");
+		return 0;
+	}
 	return dc->fb->info->mode->refresh;
 }
 
@@ -537,6 +541,8 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	tegra_fb->fb_mem = fb_mem;
 	tegra_fb->xres = fb_data->xres;
 	tegra_fb->yres = fb_data->yres;
+	tegra_fb->curr_xoffset = -1;
+	tegra_fb->curr_yoffset = -1;
 
 	if (fb_mem) {
 		fb_size = resource_size(fb_mem);
