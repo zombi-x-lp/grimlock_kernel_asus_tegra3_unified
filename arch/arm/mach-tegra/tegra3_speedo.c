@@ -554,7 +554,7 @@ int tegra_package_id(void)
  */
 static const int cpu_speedo_nominal_millivolts[] =
 /* speedo_id 0,    1,    2,    3,    4,    5,    6,    7,    8,   9,  10,  11,   12,    13,  14,  15 */
-	{ 1125, 1150, 1237, 1150, 1237, 1237, 1237, 1237, 1150, 1007, 916, 850, 1237, 1237, 950, 900};
+	{ 1125, 1150, 1237, 1237, 1237, 1237, 1237, 1237, 1150, 1007, 916, 850, 1237, 1237, 950, 900};
 
 int tegra_cpu_speedo_mv(void)
 {
@@ -566,7 +566,7 @@ int tegra_core_speedo_mv(void)
 {
 	switch (soc_speedo_id) {
 	case 0:
-		return 1200;
+		return 1250;
 	case 1:
 		if ((cpu_speedo_id != 7) && (cpu_speedo_id != 8))
 			return 1250;
