@@ -71,8 +71,7 @@ static unsigned long target_cpu_speed[CONFIG_NR_CPUS];
 static DEFINE_MUTEX(tegra_cpu_lock);
 static bool is_suspended;
 static int suspend_index;
-static bool force_policy_max = 1;
-static bool edp_enable = 1;
+static bool force_policy_max;
  int gps_enable=0;
 
 static bool camera_enable = 0;
@@ -255,17 +254,6 @@ static unsigned int cpu_user_cap;
 
 static inline void _cpu_user_cap_set_locked(void)
 {
-#ifndef CONFIG_TEGRA_CPU_CAP_EXACT_FREQ
-	if (cpu_user_cap != 0) {
-		int i;
-		for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
-			if (freq_table[i].frequency > cpu_user_cap)
-				break;
-		}
-		i = (i == 0) ? 0 : i - 1;
-		cpu_user_cap = freq_table[i].frequency;
-	}
-#endif
 	tegra_cpu_set_speed_cap(NULL);
 }
 
@@ -356,7 +344,7 @@ static unsigned int edp_predict_limit(unsigned int cpus)
 	 if( cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
 	 {
  	/* override EDP limits */
- 	limit = 1700000;
+ 	limit = 1800000;
  	}
 
 	return limit;
@@ -394,11 +382,6 @@ int tegra_edp_update_thermal_zone(int temperature)
 	int ret = 0;
 	int nlimits = cpu_edp_limits_size;
 	int index;
-	if(temperature >= 75){
-		edp_enable=1;
-	} else {
-		edp_enable=0;
-	}
 
 	if (!cpu_edp_limits)
 		return -EINVAL;
@@ -504,11 +487,6 @@ static int tegra_cpu_edp_notify(
 		edp_update_limit();
 
 		cpu_speed = tegra_getspeed(0);
-	if(edp_enable) {
-		new_speed = edp_governor_speed(new_speed);
-	} else {
-		new_speed = cpu_speed;
-	}
 		if (new_speed < cpu_speed) {
 			ret = tegra_cpu_set_speed_cap(NULL);
 		if (ret) {
