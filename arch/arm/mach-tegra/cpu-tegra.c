@@ -71,7 +71,7 @@ static unsigned long target_cpu_speed[CONFIG_NR_CPUS];
 static DEFINE_MUTEX(tegra_cpu_lock);
 static bool is_suspended;
 static int suspend_index;
-static bool force_policy_max;
+static bool force_policy_max = 1;
  int gps_enable=0;
 
 static bool camera_enable = 0;
@@ -253,9 +253,9 @@ module_param_cb(force_policy_max, &policy_ops, &force_policy_max, 0644);
 static unsigned int cpu_user_cap;
 
 static inline void _cpu_user_cap_set_locked(void)
-{
-	tegra_cpu_set_speed_cap(NULL);
-}
+ {
+ 	tegra_cpu_set_speed_cap(NULL);
+ }
 
 void tegra_cpu_user_cap_set(unsigned int speed_khz)
 {
