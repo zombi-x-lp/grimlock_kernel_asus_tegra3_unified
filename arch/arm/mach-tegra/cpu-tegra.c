@@ -72,7 +72,6 @@ static DEFINE_MUTEX(tegra_cpu_lock);
 static bool is_suspended;
 static int suspend_index;
 static bool force_policy_max = 1;
-static bool edp_enable = 1;
  int gps_enable=0;
 
 static bool camera_enable = 0;
@@ -110,7 +109,7 @@ int Asus_camera_enable_set_emc_rate(unsigned long rate)
 	cpu_emc_cur_rate = clk_get_rate(emc_clk);
 	emc_cur_rate = clk_get_rate(c);
 
-	printk("%s : camera enable emc_clk->min_rate to %d\n",
+	printk("%s : camera enable emc_clk->min_rate to %lu\n",
 		__func__, camera_emc_enable_mini_rete);
 	camera_enable_cpu_emc_mini_rate = emc_clk->min_rate;
 	emc_clk->min_rate = camera_emc_enable_mini_rete;
@@ -152,8 +151,8 @@ int Asus_camera_disable_set_emc_rate(void)
 	cpu_emc_cur_rate = clk_get_rate(emc_clk);
 	emc_cur_rate = clk_get_rate(c);
 
-	printk("%s : camera disable emc_clk->min_rate to %d\n", __func__, camera_enable_cpu_emc_mini_rate);
-	printk("%s : camera disable c->min_rate to %d\n", __func__, camera_enable_emc_mini_rate);
+	printk("%s : camera disable emc_clk->min_rate to %lu\n", __func__, camera_enable_cpu_emc_mini_rate);
+	printk("%s : camera disable c->min_rate to %lu\n", __func__, camera_enable_emc_mini_rate);
 	emc_clk->min_rate = camera_enable_cpu_emc_mini_rate;
 	c->min_rate = camera_enable_emc_mini_rate;
 
@@ -167,7 +166,7 @@ static int gps_state_set(const char *arg, const struct kernel_param *kp)
 	int ret = 0;
 	static struct clk *c=NULL;
 	static int emc_min_rate=0;
-	#define MINMIAM_RATE (51000000)
+	#define MINMIAM_RATE (204000000)
 	if (c==NULL)
 		c=tegra_get_clock_by_name("emc");
 
@@ -353,10 +352,10 @@ static unsigned int edp_predict_limit(unsigned int cpus)
 	if (system_edp_limits && system_edp_alarm)
 		limit = min(limit, system_edp_limits[cpus - 1]);
 	limit = min(limit, pwr_cap_limits[cpus - 1]);//pwr save
-	 if( cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
+	 if (cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
 	 {
  	/* override EDP limits */
- 	limit = 1700000;
+ 	limit = 1800000;
  	}
 
 	return limit;
@@ -394,11 +393,6 @@ int tegra_edp_update_thermal_zone(int temperature)
 	int ret = 0;
 	int nlimits = cpu_edp_limits_size;
 	int index;
-	if(temperature >= 75){
-		edp_enable=1;
-	} else {
-		edp_enable=0;
-	}
 
 	if (!cpu_edp_limits)
 		return -EINVAL;
@@ -504,23 +498,26 @@ static int tegra_cpu_edp_notify(
 		edp_update_limit();
 
 		cpu_speed = tegra_getspeed(0);
-	if(edp_enable) {
-		new_speed = edp_governor_speed(new_speed);
-	} else {
-		new_speed = cpu_speed;
-	}
+		new_speed = edp_governor_speed(cpu_speed);
 		if (new_speed < cpu_speed) {
 			ret = tegra_cpu_set_speed_cap(NULL);
+			printk(KERN_DEBUG "cpu-tegra:%sforce EDP limit %u kHz"
+				"\n", ret ? " failed to " : " ", new_speed);
+		}
+		if (!ret)
+			ret = tegra_cpu_dvfs_alter(
+				edp_thermal_index, &edp_cpumask, false, event);
 		if (ret) {
 			cpu_clear(cpu, edp_cpumask);
 			edp_update_limit();
-		}
 		}
 		mutex_unlock(&tegra_cpu_lock);
 		break;
 	case CPU_DEAD:
 		mutex_lock(&tegra_cpu_lock);
 		cpu_clear(cpu, edp_cpumask);
+		tegra_cpu_dvfs_alter(
+			edp_thermal_index, &edp_cpumask, true, event);
 		edp_update_limit();
 		tegra_cpu_set_speed_cap(NULL);
 		mutex_unlock(&tegra_cpu_lock);
@@ -972,7 +969,7 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 	target_cpu_speed[policy->cpu] = policy->cur;
 
 	/* FIXME: what's the actual transition time? */
-	policy->cpuinfo.transition_latency = 300 * 1000;
+	policy->cpuinfo.transition_latency = 40 * 1000;
 
 	policy->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 	cpumask_copy(policy->related_cpus, cpu_possible_mask);
