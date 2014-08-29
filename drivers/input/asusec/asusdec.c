@@ -60,8 +60,6 @@ static ssize_t asusdec_charging_led_store(struct device *class,
 		struct device_attribute *attr,const char *buf, size_t count);
 static ssize_t asusdec_led_show(struct device *class,
 	struct device_attribute *attr,char *buf);
-static ssize_t asusdec_show_ec_wakeup(struct device *class,
-		struct device_attribute *attr,char *buf);
 static ssize_t asusdec_store_ec_wakeup(struct device *class,
 		struct device_attribute *attr,const char *buf, size_t count);
 static ssize_t asusdec_show_drain(struct device *class,
@@ -89,7 +87,6 @@ static int asusdec_resume(struct i2c_client *client);
 static int asusdec_open(struct inode *inode, struct file *flip);
 static int asusdec_release(struct inode *inode, struct file *flip);
 static long asusdec_ioctl(struct file *flip, unsigned int cmd, unsigned long arg);
-static void asusdec_enter_factory_mode(void);
 static ssize_t ec_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
 static ssize_t ec_read(struct file *file, char __user *buf, size_t count, loff_t *ppos);
 static void BuffPush(char data);
@@ -207,7 +204,7 @@ static DEVICE_ATTR(ec_info, S_IWUSR | S_IRUGO, asusdec_info_show,NULL);
 static DEVICE_ATTR(ec_dock, S_IWUSR | S_IRUGO, asusdec_show_dock,NULL);
 static DEVICE_ATTR(ec_dock_led, S_IWUSR | S_IRUGO, asusdec_led_show,asusdec_store_led);
 static DEVICE_ATTR(ec_charging_led, S_IWUSR | S_IRUGO, NULL, asusdec_charging_led_store);
-static DEVICE_ATTR(ec_wakeup, S_IWUSR | S_IRUGO, asusdec_show_ec_wakeup,asusdec_store_ec_wakeup);
+static DEVICE_ATTR(ec_wakeup, S_IWUSR | S_IRUGO, NULL,asusdec_store_ec_wakeup);
 static DEVICE_ATTR(ec_dock_discharge, S_IWUSR | S_IRUGO, asusdec_show_drain,NULL);
 static DEVICE_ATTR(ec_dock_battery, S_IWUSR | S_IRUGO, asusdec_show_dock_battery,NULL);
 static DEVICE_ATTR(ec_dock_battery_status, S_IWUSR | S_IRUGO, asusdec_show_dock_battery_status,NULL);
@@ -240,35 +237,11 @@ static const struct attribute_group asusdec_smbus_group = {
 };
 
 static int asusdec_kp_sci_table[]={0, KEY_SLEEP, KEY_WLAN, KEY_BLUETOOTH,
-		ASUSDEC_KEY_TOUCHPAD_TOGGLE, KEY_BRIGHTNESSDOWN, KEY_BRIGHTNESSUP, KEY_BRIGHTNESS_ZERO /*AUTO*/,
+		ASUSDEC_KEY_TOUCHPAD, KEY_BRIGHTNESSDOWN, KEY_BRIGHTNESSUP, ASUSDEC_KEY_AUTOBRIGHT,
 		KEY_CAMERA, -9, -10, -11,
 		-12, -13, -14, -15,
-		KEY_WWW, KEY_SETUP /*SETTINGS*/, KEY_PREVIOUSSONG, KEY_PLAYPAUSE,
+		KEY_WWW, ASUSDEC_KEY_SETTING, KEY_PREVIOUSSONG, KEY_PLAYPAUSE,
 		KEY_NEXTSONG, KEY_MUTE, KEY_VOLUMEDOWN, KEY_VOLUMEUP};
-
-
-/* CM-compatible key mapping
-https://github.com/CyanogenMod/android_kernel_asus_tf700t/commit/cd28094a30b81401cf8a259d9a1353decdd5427d
-*/
-#define ASUSDEC_KEY_TOUCHPAD_TOGGLE 0xCA	/* KEY_PROG3 */
-static int asusdec_kp_sci_table_cm[]={0, KEY_SLEEP, KEY_WLAN, KEY_BLUETOOTH,
-		ASUSDEC_KEY_TOUCHPAD_TOGGLE, KEY_BRIGHTNESSDOWN, KEY_BRIGHTNESSUP, KEY_BRIGHTNESS_ZERO /*ASUSDEC_KEY_AUTOBRIGHT*/,
-		KEY_CAMERA, -9, -10, -11,
-		-12, -13, -14, -15,
-		KEY_WWW, KEY_SETUP /*ASUSDEC_KEY_SETTING*/, KEY_PREVIOUSSONG, KEY_PLAYPAUSE,
-		KEY_NEXTSONG, KEY_MUTE, KEY_VOLUMEDOWN, KEY_VOLUMEUP};
-
-/* Function keys */
-static int asusdec_kp_sci_table_fn[]={0, KEY_SLEEP, KEY_F1, KEY_F2,
-		KEY_F3, KEY_F4, KEY_F5, KEY_F6,
-		KEY_F7, -9, -10, -11,
-		-12, -13, -14, -15,
-		KEY_F8, KEY_F9, KEY_F10, KEY_F11,
-		KEY_F12, KEY_MUTE, KEY_VOLUMEDOWN, KEY_VOLUMEUP};
-
-int cm_mode = 0;
-module_param(cm_mode, int, 0644);
-
 
 /*
  * functions definition
@@ -666,11 +639,6 @@ static int asusdec_chip_init(struct i2c_client *client)
 
 	ec_chip->tf_dock = 1;
 
-#if FACTORY_MODE
-	if(factory_mode == 2)
-		asusdec_enter_factory_mode();
-#endif
-
 	if(asusdec_input_device_create(client)){
 		goto fail_to_access_ec;
 	}
@@ -700,8 +668,6 @@ static int asusdec_chip_init(struct i2c_client *client)
 
 	ASUSDEC_NOTICE("touchpad and keyboard init\n");
 	ec_chip->d_index = 0;
-
-	ec_chip->kp_fn_mode = 0;
 
 	asusdec_keypad_enable(client);
 	asusdec_clear_i2c_buffer(client);
@@ -1404,22 +1370,10 @@ static void asusdec_kp_kbc(void){
 		}
 	}
 }
-
-static int are_fn_keys_active(struct input_dev *dev)
-{
-	return test_bit(KEY_LEFTSHIFT, dev->key) || test_bit(KEY_RIGHTSHIFT, dev->key);
-}
-
 static void asusdec_kp_sci(void){
 	int ec_signal = ec_chip->i2c_data[2];
 
-	if (are_fn_keys_active(ec_chip->indev))
-		ec_chip->keypad_data.input_keycode = asusdec_kp_sci_table_fn[ec_signal];
-	else if (cm_mode)
-		ec_chip->keypad_data.input_keycode = asusdec_kp_sci_table_cm[ec_signal];
-	else
-		ec_chip->keypad_data.input_keycode = asusdec_kp_sci_table[ec_signal];
-
+	ec_chip->keypad_data.input_keycode = asusdec_kp_sci_table[ec_signal];
 	if(ec_chip->keypad_data.input_keycode > 0){
 		ASUSDEC_INFO("input_keycode = 0x%x\n", ec_chip->keypad_data.input_keycode);
 
@@ -1482,15 +1436,6 @@ static void asusdec_kp_key(void){
 		ASUSDEC_INFO("Unknown scancode = 0x%x\n", scancode);
 	}
 
-	// Now we are in kp_fn_mode?. Then kp_sci will be mapped to Fn keys
-	bool metastate =
-		(
-		scancode == ASUSDEC_KEYPAD_LEFTCTRL || scancode == ASUSDEC_KEYPAD_RIGHTCTRL ||
-		scancode == ASUSDEC_KEYPAD_KEY_LEFTSHIFT || scancode == ASUSDEC_KEYPAD_KEY_RIGHTSHIFT ||
-		scancode == ASUSDEC_KEYPAD_LEFTALT || scancode == ASUSDEC_KEYPAD_RIGHTALT
-		);
-	ec_chip->kp_fn_mode = (ec_chip->keypad_data.value == 1 && metastate) ? 1 : 0;
-	ASUSDEC_INFO("kp_fn_mode = %d\n", ec_chip->kp_fn_mode);
 }
 
 static void asusdec_keypad_processing(void){
@@ -1631,10 +1576,6 @@ static void asusdec_dock_init_work_function(struct work_struct *dat)
 				memset(ec_chip->mcu_fw_version, 0, 5);
 			}
 			ec_chip->dock_type = DOCK_UNKNOWN;
-
-			// sync ec_wakeup status and kp_fn_mode
-			ec_chip->ec_wakeup = 0;
-			ec_chip->kp_fn_mode = 0;
 
 			memset(ec_chip->ec_model_name, 0, 32);
 			memset(ec_chip->ec_version, 0, 32);
@@ -1938,7 +1879,6 @@ static int __devinit asusdec_probe(struct i2c_client *client,
 	ec_chip->indev = NULL;
 	ec_chip->lid_indev = NULL;
 	ec_chip->private->abs_dev = NULL;
-	ec_chip->kp_fn_mode = 0;
 	asusdec_dockram_init(client);
 
 	cdev_add(asusdec_cdev,asusdec_dev,1) ;
@@ -2098,15 +2038,6 @@ static ssize_t asusdec_led_show(struct device *class,struct device_attribute *at
 		return sprintf(buf, "Fail to EC LED Blink\n");
 	else
 		return sprintf(buf, "EC LED Blink\n");
-}
-
-static ssize_t asusdec_show_ec_wakeup(struct device *class,struct device_attribute *attr,char *buf)
-{
-	if (ec_chip->ec_wakeup == 0) {
-		return sprintf(buf, "0\n");
-	} else {
-		return sprintf(buf, "1\n");
-	}
 }
 
 static ssize_t asusdec_store_ec_wakeup(struct device *class,struct device_attribute *attr,const char *buf, size_t count)
@@ -2449,18 +2380,6 @@ static long asusdec_ioctl(struct file *flip,
             return -ENOTTY;
 	}
     return 0;
-}
-
-static void asusdec_enter_factory_mode(void){
-
-	ASUSDEC_NOTICE("Entering factory mode\n");
-	asusdec_dockram_read_data(0x0A);
-	ec_chip->i2c_dm_data[0] = 8;
-	ec_chip->i2c_dm_data[5] = ec_chip->i2c_dm_data[5] | 0x40;
-#if CSC_IMAGE
-        ec_chip->i2c_dm_data[5] = ec_chip->i2c_dm_data[5] & 0xBF;
-#endif
-	asusdec_dockram_write_data(0x0A,9);
 }
 
 static int BuffDataSize(void)

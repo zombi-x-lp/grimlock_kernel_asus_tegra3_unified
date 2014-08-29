@@ -83,7 +83,9 @@
 #define ASUSDEC_PS2_ACK			0xFA
 
 //-----------------------------------------
-#define ASUSDEC_KEY_TOUCHPAD_TOGGLE   0xCA   /* Request switch touchpad on or off */
+#define ASUSDEC_KEY_TOUCHPAD           KEY_F2
+#define ASUSDEC_KEY_AUTOBRIGHT	       KEY_F3
+#define ASUSDEC_KEY_SETTING	       KEY_F4
 
 /*************scan 2 make mapping***************/
 #define ASUSDEC_KEYPAD_ESC		0x76
