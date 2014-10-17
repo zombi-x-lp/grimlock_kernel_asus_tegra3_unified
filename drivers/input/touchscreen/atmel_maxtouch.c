@@ -1841,7 +1841,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt, int last_touch)
 				xpos >>= 2;
 			if (mxt->max_y_val < 1024)
 				ypos >>= 2;
-
+			xpos = mxt->max_x_val – xpos;
 			stored_x[touch_number] = xpos;
 			stored_y[touch_number] = ypos;
 			fingerInfo[touch_number].x=xpos;
