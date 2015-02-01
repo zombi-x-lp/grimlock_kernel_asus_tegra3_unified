@@ -128,5 +128,10 @@ obj-$(CONFIG_PSTORE)		+= pstore/
 # Patched by YAFFS
 obj-$(CONFIG_YAFFS_FS)		+= yaffs2/
 
+
 # Dynamic Fsync (By our buddy Faux123)
 obj-$(CONFIG_DYNAMIC_FSYNC)	+= dyn_sync_cntrl.o
+
+# exfat
+obj-$(CONFIG_EXFAT_FS)		+= exfat/
+

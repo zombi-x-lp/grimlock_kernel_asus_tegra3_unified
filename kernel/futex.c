@@ -817,6 +817,7 @@ lookup_pi_state(u32 uval, struct futex_hash_bucket *hb,
 			 * Handle the owner died case:
 			 */
 			if (uval & FUTEX_OWNER_DIED) {
+
 				/*
 				 * exit_pi_state_list sets owner to NULL and
 				 * wakes the topmost waiter. The task which
@@ -1129,7 +1130,7 @@ static int wake_futex_pi(u32 __user *uaddr, u32 uval, struct futex_q *this)
 {
 	struct task_struct *new_owner;
 	struct futex_pi_state *pi_state = this->pi_state;
-	u32 uninitialized_var(curval), newval;
+	u32 curval, newval;
 	int ret = 0;
 
 	if (!pi_state)
@@ -1435,8 +1436,8 @@ void requeue_pi_wake_futex(struct futex_q *q, union futex_key *key,
  * then direct futex_lock_pi_atomic() to force setting the FUTEX_WAITERS bit.
  * hb1 and hb2 must be held by the caller.
  *
- * Return:
- *  0 - failed to acquire the lock atomically;
+ * Returns:
+ *  0 - failed to acquire the lock atomicly
  * >0 - acquired the lock, return value is vpid of the top_waiter
  * <0 - error
  */
