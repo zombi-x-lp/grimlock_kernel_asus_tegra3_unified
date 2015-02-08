@@ -399,11 +399,6 @@ int tegra_edp_update_thermal_zone(int temperature)
 	int ret = 0;
 	int nlimits = cpu_edp_limits_size;
 	int index;
-	if(temperature >= 75){
-		edp_enable=1;
-	} else {
-		edp_enable=0;
-	}
 
 	if (!cpu_edp_limits)
 		return -EINVAL;
@@ -955,17 +950,6 @@ static struct notifier_block tegra_cpu_pm_notifier = {
 	.notifier_call = tegra_pm_notify,
 };
 
-
-void rebuild_max_freq_table(unsigned int max_rate)
-{
-	power_mode_table[SYSTEM_NORMAL_MODE] = max_rate;
-#ifdef CONFIG_TF300T_OC
-	power_mode_table[SYSTEM_BALANCE_MODE] = 1200000;
-#else
-	power_mode_table[SYSTEM_BALANCE_MODE] = max_rate - 200000;
-#endif
-	power_mode_table[SYSTEM_PWRSAVE_MODE] = SYSTEM_PWRSAVE_MODE_MAX_FREQ;
-}
 
 static int tegra_cpu_init(struct cpufreq_policy *policy)
 {
