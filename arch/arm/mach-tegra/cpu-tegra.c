@@ -72,7 +72,8 @@ static DEFINE_MUTEX(tegra_cpu_lock);
 static bool is_suspended;
 static int suspend_index;
 static bool force_policy_max = 1;
- int gps_enable=0;
+
+int gps_enable=0;
 
 static bool camera_enable = 0;
 static unsigned long camera_enable_cpu_emc_mini_rate = 0;
@@ -355,7 +356,7 @@ static unsigned int edp_predict_limit(unsigned int cpus)
 	 if (cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
 	 {
  	/* override EDP limits */
- 	limit = 1800000;
+ 	limit = 1700000;
  	}
 
 	return limit;
@@ -393,6 +394,11 @@ int tegra_edp_update_thermal_zone(int temperature)
 	int ret = 0;
 	int nlimits = cpu_edp_limits_size;
 	int index;
+	if(temperature >= 75){
+		edp_enable=1;
+	} else {
+		edp_enable=0;
+	}
 
 	if (!cpu_edp_limits)
 		return -EINVAL;
