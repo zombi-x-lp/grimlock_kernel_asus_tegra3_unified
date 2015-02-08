@@ -103,7 +103,7 @@ static const u32 cpu_process_speedos[][CPU_PROCESS_CORNERS_NUM] = {
 /* T33 family */
 	{295, 336, 358, 375, UINT_MAX},      /* [7]: cpu_speedo_id: 4: AP33 */
 #ifdef CONFIG_TF300T_OC
-	{295, 336, 358, 375, 391, UNIT_MAX}, /* [10]: cpu_speedo_id: 7: T30L */
+	{295, 336, 358, 375, 391, UINT_MAX}, /* [10]: cpu_speedo_id: 7: T30L */
 #else	
 	{358, 358, 358, 358, 397, UINT_MAX}, /* [8]: cpu_speedo_id: 5: T33  */
 #endif	
