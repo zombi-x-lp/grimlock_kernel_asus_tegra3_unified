@@ -54,6 +54,9 @@
 #define SYSTEM_PWRSAVE_MODE	(2)
 #define SYSTEM_MODE_END 		(SYSTEM_PWRSAVE_MODE + 1)
 #define SYSTEM_PWRSAVE_MODE_MAX_FREQ	(1000000)
+#ifdef CONFIG_TF300T_OC
+unsigned int power_mode_table[SYSTEM_MODE_END] = {1000000,1200000,2000000};
+#else
 unsigned int power_mode_table[SYSTEM_MODE_END] = {1000000,1200000,1400000};
 */
 
@@ -72,7 +75,8 @@ static DEFINE_MUTEX(tegra_cpu_lock);
 static bool is_suspended;
 static int suspend_index;
 static bool force_policy_max = 1;
- int gps_enable=0;
+
+int gps_enable=0;
 
 static bool camera_enable = 0;
 static unsigned long camera_enable_cpu_emc_mini_rate = 0;
@@ -355,7 +359,7 @@ static unsigned int edp_predict_limit(unsigned int cpus)
 	 if (cpu_edp_limits[edp_thermal_index].temperature > 25 && cpu_edp_limits[edp_thermal_index].temperature < 65 )
 	 {
  	/* override EDP limits */
- 	limit = 1800000;
+ 	limit = 1700000;
  	}
 
 	return limit;
@@ -370,9 +374,11 @@ static void edp_update_limit(void)
 #else
 	unsigned int i;
 	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
+#ifndef CONFIG_TF300T_OC
 		if (freq_table[i].frequency > limit) {
 			break;
 		}
+#endif
 	}
 	BUG_ON(i == 0);	/* min freq above the limit or table empty */
 	edp_limit = freq_table[i-1].frequency;
@@ -943,6 +949,7 @@ static int tegra_pm_notify(struct notifier_block *nb, unsigned long event,
 static struct notifier_block tegra_cpu_pm_notifier = {
 	.notifier_call = tegra_pm_notify,
 };
+
 
 static int tegra_cpu_init(struct cpufreq_policy *policy)
 {
