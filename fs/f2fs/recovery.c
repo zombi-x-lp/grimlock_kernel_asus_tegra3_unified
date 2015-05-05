@@ -336,8 +336,8 @@ static int do_recover_data(struct f2fs_sb_info *sbi, struct inode *inode,
 	wait_on_page_writeback(dn.node_page);
 
 	get_node_info(sbi, dn.nid, &ni);
-	f2fs_bug_on(ni.ino != ino_of_node(page));
-	f2fs_bug_on(ofs_of_node(dn.node_page) != ofs_of_node(page));
+	BUG_ON(ni.ino != ino_of_node(page));
+	BUG_ON(ofs_of_node(dn.node_page) != ofs_of_node(page));
 
 	for (; start < end; start++) {
 		block_t src, dest;
@@ -347,13 +347,13 @@ static int do_recover_data(struct f2fs_sb_info *sbi, struct inode *inode,
 
 		if (src != dest && dest != NEW_ADDR && dest != NULL_ADDR) {
 			if (src == NULL_ADDR) {
-				err = reserve_new_block(&dn);
+				int err = reserve_new_block(&dn);
 				/* We should not get -ENOSPC */
 				if (err)
 					f2fs_msg(sbi->sb, KERN_INFO,
 						"%s: reserve_new_block failed: %d",
 						__func__, err);
-				f2fs_bug_on(err);
+				BUG_ON(err);
 			}
 
 			/* Check the previous node page having this index */
@@ -462,7 +462,6 @@ int recover_fsync_data(struct f2fs_sb_info *sbi)
 {
 	struct list_head inode_list;
 	int err;
-	bool need_writecp = false;
 
 	fsync_entry_slab = f2fs_kmem_cache_create("f2fs_fsync_inode_entry",
 			sizeof(struct fsync_inode_entry), NULL);
@@ -472,7 +471,7 @@ int recover_fsync_data(struct f2fs_sb_info *sbi)
 	INIT_LIST_HEAD(&inode_list);
 
 	/* step #1: find fsynced inode numbers */
-	sbi->por_doing = true;
+	sbi->por_doing = 1;
 	err = find_fsync_dnodes(sbi, &inode_list);
 	if (err) {
 		f2fs_msg(sbi->sb, KERN_INFO,
@@ -483,16 +482,21 @@ int recover_fsync_data(struct f2fs_sb_info *sbi)
 	if (list_empty(&inode_list))
 		goto out;
 
-	need_writecp = true;
-
 	/* step #2: recover data */
 	err = recover_data(sbi, &inode_list, CURSEG_WARM_NODE);
-	f2fs_bug_on(!list_empty(&inode_list));
+	if (!list_empty(&inode_list)) {
+		f2fs_handle_error(sbi);
+		err = -EIO;
+	}
 out:
 	destroy_fsync_dnodes(&inode_list);
 	kmem_cache_destroy(fsync_entry_slab);
-	sbi->por_doing = false;
-	if (!err && need_writecp)
+	sbi->por_doing = 0;
+	if (!err) {
+		f2fs_msg(sbi->sb, KERN_INFO, "recovery complete");
 		write_checkpoint(sbi, false);
+	} else
+		f2fs_msg(sbi->sb, KERN_ERR, "recovery did not fully complete");
+
 	return err;
 }

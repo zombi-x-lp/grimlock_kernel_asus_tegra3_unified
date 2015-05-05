@@ -142,8 +142,8 @@ long sync_meta_pages(struct f2fs_sb_info *sbi, enum page_type type,
 		for (i = 0; i < nr_pages; i++) {
 			struct page *page = pvec.pages[i];
 			lock_page(page);
-			f2fs_bug_on(page->mapping != mapping);
-			f2fs_bug_on(!PageDirty(page));
+			BUG_ON(page->mapping != mapping);
+			BUG_ON(!PageDirty(page));
 			clear_page_dirty_for_io(page);
 			if (f2fs_write_meta_page(page, &wbc)) {
 				unlock_page(page);
@@ -166,8 +166,6 @@ static int f2fs_set_meta_page_dirty(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
 	struct f2fs_sb_info *sbi = F2FS_SB(mapping->host->i_sb);
-
-	trace_f2fs_set_page_dirty(page, META);
 
 	SetPageUptodate(page);
 	if (!PageDirty(page)) {
@@ -208,8 +206,12 @@ int acquire_orphan_inode(struct f2fs_sb_info *sbi)
 void release_orphan_inode(struct f2fs_sb_info *sbi)
 {
 	mutex_lock(&sbi->orphan_inode_mutex);
-	f2fs_bug_on(sbi->n_orphans == 0);
-	sbi->n_orphans--;
+	if (sbi->n_orphans == 0) {
+		f2fs_msg(sbi->sb, KERN_ERR, "releasing "
+			"unacquired orphan inode");
+		f2fs_handle_error(sbi);
+	} else
+		sbi->n_orphans--;
 	mutex_unlock(&sbi->orphan_inode_mutex);
 }
 
@@ -228,8 +230,12 @@ void add_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 			break;
 		orphan = NULL;
 	}
-
-	new = f2fs_kmem_cache_alloc(orphan_entry_slab, GFP_ATOMIC);
+retry:
+	new = kmem_cache_alloc(orphan_entry_slab, GFP_ATOMIC);
+	if (!new) {
+		cond_resched();
+		goto retry;
+	}
 	new->ino = ino;
 
 	/* add new_oentry into list which is sorted by inode number */
@@ -252,8 +258,13 @@ void remove_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 		if (orphan->ino == ino) {
 			list_del(&orphan->list);
 			kmem_cache_free(orphan_entry_slab, orphan);
-			f2fs_bug_on(sbi->n_orphans == 0);
-			sbi->n_orphans--;
+			if (sbi->n_orphans == 0) {
+				f2fs_msg(sbi->sb, KERN_ERR, "removing "
+						"unacquired orphan inode %d",
+						ino);
+				f2fs_handle_error(sbi);
+			} else
+				sbi->n_orphans--;
 			break;
 		}
 	}
@@ -263,7 +274,12 @@ void remove_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 static void recover_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	struct inode *inode = f2fs_iget(sbi->sb, ino);
-	f2fs_bug_on(IS_ERR(inode));
+	if (IS_ERR(inode)) {
+		f2fs_msg(sbi->sb, KERN_ERR, "unable to recover orphan inode %d",
+				ino);
+		f2fs_handle_error(sbi);
+		return;
+	}
 	clear_nlink(inode);
 
 	/* truncate all the data during iput */
@@ -277,7 +293,7 @@ int recover_orphan_inodes(struct f2fs_sb_info *sbi)
 	if (!is_set_ckpt_flags(F2FS_CKPT(sbi), CP_ORPHAN_PRESENT_FLAG))
 		return 0;
 
-	sbi->por_doing = true;
+	sbi->por_doing = 1;
 	start_blk = __start_cp_addr(sbi) + 1;
 	orphan_blkaddr = __start_sum_addr(sbi) - 1;
 
@@ -294,7 +310,7 @@ int recover_orphan_inodes(struct f2fs_sb_info *sbi)
 	}
 	/* clear Orphan Flag */
 	clear_ckpt_flags(F2FS_CKPT(sbi), CP_ORPHAN_PRESENT_FLAG);
-	sbi->por_doing = false;
+	sbi->por_doing = 0;
 	return 0;
 }
 
@@ -469,7 +485,9 @@ static int __add_dirty_inode(struct inode *inode, struct dir_inode_entry *new)
 			return -EEXIST;
 	}
 	list_add_tail(&new->list, head);
-	stat_inc_dirty_dir(sbi);
+#ifdef CONFIG_F2FS_STAT_FS
+	sbi->n_dirty_dirs++;
+#endif
 	return 0;
 }
 
@@ -480,8 +498,12 @@ void set_dirty_dir_page(struct inode *inode, struct page *page)
 
 	if (!S_ISDIR(inode->i_mode))
 		return;
-
-	new = f2fs_kmem_cache_alloc(inode_entry_slab, GFP_NOFS);
+retry:
+	new = kmem_cache_alloc(inode_entry_slab, GFP_NOFS);
+	if (!new) {
+		cond_resched();
+		goto retry;
+	}
 	new->inode = inode;
 	INIT_LIST_HEAD(&new->list);
 
@@ -498,9 +520,13 @@ void set_dirty_dir_page(struct inode *inode, struct page *page)
 void add_dirty_dir_inode(struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(inode->i_sb);
-	struct dir_inode_entry *new =
-			f2fs_kmem_cache_alloc(inode_entry_slab, GFP_NOFS);
-
+	struct dir_inode_entry *new;
+retry:
+	new = kmem_cache_alloc(inode_entry_slab, GFP_NOFS);
+	if (!new) {
+		cond_resched();
+		goto retry;
+	}
 	new->inode = inode;
 	INIT_LIST_HEAD(&new->list);
 
@@ -531,7 +557,9 @@ void remove_dirty_dir_inode(struct inode *inode)
 		if (entry->inode == inode) {
 			list_del(&entry->list);
 			kmem_cache_free(inode_entry_slab, entry);
-			stat_dec_dirty_dir(sbi);
+#ifdef CONFIG_F2FS_STAT_FS
+			sbi->n_dirty_dirs--;
+#endif
 			break;
 		}
 	}
@@ -744,15 +772,8 @@ static void do_checkpoint(struct f2fs_sb_info *sbi, bool is_umount)
 	f2fs_put_page(cp_page, 1);
 
 	/* wait for previous submitted node/meta pages writeback */
-	sbi->cp_task = current;
-	while (get_pages(sbi, F2FS_WRITEBACK)) {
-		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (!get_pages(sbi, F2FS_WRITEBACK))
-			break;
-		io_schedule();
-	}
-	__set_current_state(TASK_RUNNING);
-	sbi->cp_task = NULL;
+	while (get_pages(sbi, F2FS_WRITEBACK))
+		congestion_wait(BLK_RW_ASYNC, HZ / 50);
 
 	filemap_fdatawait_range(sbi->node_inode->i_mapping, 0, LONG_MAX);
 	filemap_fdatawait_range(sbi->meta_inode->i_mapping, 0, LONG_MAX);
