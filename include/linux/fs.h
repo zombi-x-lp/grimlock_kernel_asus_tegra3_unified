@@ -524,6 +524,7 @@ enum positive_aop_returns {
 struct page;
 struct address_space;
 struct writeback_control;
+enum migrate_mode;
 
 struct iov_iter {
 	const struct iovec *iov;
@@ -608,9 +609,12 @@ struct address_space_operations {
 			loff_t offset, unsigned long nr_segs);
 	int (*get_xip_mem)(struct address_space *, pgoff_t, int,
 						void **, unsigned long *);
-	/* migrate the contents of a page to the specified target */
+	/*
+	 * migrate the contents of a page to the specified target. If sync
+	 * is false, it must not block.
+	 */
 	int (*migratepage) (struct address_space *,
-			struct page *, struct page *);
+			struct page *, struct page *, enum migrate_mode);
 	int (*launder_page) (struct page *);
 	int (*is_partially_uptodate) (struct page *, read_descriptor_t *,
 					unsigned long);
@@ -963,7 +967,12 @@ struct file {
 #define f_dentry	f_path.dentry
 #define f_vfsmnt	f_path.mnt
 	const struct file_operations	*f_op;
-	spinlock_t		f_lock;  /* f_ep_links, f_flags, no IRQ */
+
+	/*
+	 * Protects f_ep_links, f_flags, f_pos vs i_size in lseek SEEK_CUR.
+	 * Must not be taken from IRQ context.
+	 */
+	spinlock_t		f_lock;
 #ifdef CONFIG_SMP
 	int			f_sb_list_cpu;
 #endif
@@ -1430,6 +1439,7 @@ struct super_block {
 	u8 s_uuid[16];				/* UUID */
 
 	void 			*s_fs_info;	/* Filesystem private info */
+	unsigned int		s_max_links;
 	fmode_t			s_mode;
 
 	/* Granularity of c/m/atime in ns.
@@ -2412,8 +2422,8 @@ file_ra_state_init(struct file_ra_state *ra, struct address_space *mapping);
 extern loff_t noop_llseek(struct file *file, loff_t offset, int origin);
 extern loff_t no_llseek(struct file *file, loff_t offset, int origin);
 extern loff_t generic_file_llseek(struct file *file, loff_t offset, int origin);
-extern loff_t generic_file_llseek_unlocked(struct file *file, loff_t offset,
-			int origin);
+extern loff_t generic_file_llseek_size(struct file *file, loff_t offset,
+		int origin, loff_t maxsize);
 extern int generic_file_open(struct inode * inode, struct file * filp);
 extern int nonseekable_open(struct inode * inode, struct file * filp);
 
@@ -2558,7 +2568,8 @@ extern int generic_check_addressable(unsigned, u64);
 
 #ifdef CONFIG_MIGRATION
 extern int buffer_migrate_page(struct address_space *,
-				struct page *, struct page *);
+				struct page *, struct page *,
+				enum migrate_mode);
 #else
 #define buffer_migrate_page NULL
 #endif

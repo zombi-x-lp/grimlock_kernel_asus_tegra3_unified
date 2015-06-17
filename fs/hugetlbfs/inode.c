@@ -576,7 +576,8 @@ static int hugetlbfs_set_page_dirty(struct page *page)
 }
 
 static int hugetlbfs_migrate_page(struct address_space *mapping,
-				struct page *newpage, struct page *page)
+				struct page *newpage, struct page *page,
+				enum migrate_mode mode)
 {
 	int rc;
 
@@ -970,7 +971,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 
 	d_instantiate(path.dentry, inode);
 	inode->i_size = size;
-	inode->i_nlink = 0;
+	clear_nlink(inode);
 
 	error = -ENFILE;
 	file = alloc_file(&path, FMODE_WRITE | FMODE_READ,
